@@ -1,0 +1,6 @@
+yfinance
+stockstats
+openai
+requests
+pandas
+numpy
