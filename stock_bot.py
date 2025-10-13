@@ -10,8 +10,7 @@
 # Requirements: See requirements.txt
 # Setup: Configure EMAIL_FROM, EMAIL_TO, EMAIL_PASSWORD, GROK_API_KEY in GitHub Secrets
 
-import os
-import datetime
+from datetime import datetime, date
 import smtplib
 import logging
 from email.mime.text import MIMEText
@@ -187,14 +186,14 @@ def get_larsson_analysis(ticker, larsson_line, hist_df):
 def get_cycle_analysis(ticker, data):
     name = get_ticker_name(ticker)
     if ticker == 'BTC-USD':
-        days_since_halving = (datetime.date.fromisoformat(data['date']) - 
-                            datetime.date(2024, 4, 19)).days
+        days_since_halving = (date.fromisoformat(data['date']) - 
+                            date(2024, 4, 19)).days
         prompt = f"""
         Project: {PROJECT_NAME}
         Analyze Bitcoin's position in the 4-year halving cycle (accumulation, growth, bubble, crash).
         Current date: {data['date']}, Days since halving (Apr 19, 2024): {days_since_halving}
-        Price: ${data['current_price']:.2f}, RSI: {data['rsi']:.1f}, SMA: ${data['sma_50']:.2f}
-        Dominance: {data['btc_dominance'] or 'N/A'}%, Puell Multiple: {data['puell_multiple']:.2f}
+        Price: ${float(data['current_price']):.2f}, RSI: {float(data['rsi']):.1f}, SMA: ${float(data['sma_50']):.2f}
+        Dominance: {data['btc_dominance'] or 'N/A'}%, Puell Multiple: {float(data['puell_multiple']):.2f}
         Output JSON: {{"phase": "growth", "analysis": "Post-halving rally likely, but watch for bubble signs."}}
         """
     elif ticker == '^GSPC':
@@ -202,8 +201,8 @@ def get_cycle_analysis(ticker, data):
         Project: {PROJECT_NAME}
         Analyze S&P 500's position in the 4-year presidential election cycle (year 1-4, Wyckoff phases).
         Current date: {data['date']}, Year: {data['election_year']}
-        Price: {data['current_price']:.2f}, RSI: {data['rsi']:.1f}, SMA: {data['sma_50']:.2f}
-        VIX: {data['vix']:.2f}, Yield Curve: {data['yield_curve']:.2f}%
+        Price: {float(data['current_price']):.2f}, RSI: {float(data['rsi']):.1f}, SMA: {float(data['sma_50']):.2f}
+        VIX: {float(data['vix']):.2f}, Yield Curve: {float(data['yield_curve']):.2f}%
         Output JSON: {{"phase": "year 1", "analysis": "Early cycle volatility expected."}}
         """
     else:
@@ -221,7 +220,7 @@ def fetch_btc_dominance():
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             return response.json()['data']['market_cap_percentage']['btc']
-        except RequestException as e:
+        except Exception as e:
             logger.error(f"Retry {attempt+1}/3 for BTC dominance: {e}")
             time.sleep(2)
     return None
@@ -230,7 +229,7 @@ def approximate_puell_multiple(btc_data):
     try:
         daily_revenue = btc_data['close'] * 6.25 / 144
         ma365_revenue = daily_revenue.rolling(window=365).mean()
-        return daily_revenue.iloc[-1] / ma365_revenue.iloc[-1]
+        return float(daily_revenue.iloc[-1] / ma365_revenue.iloc[-1])
     except Exception as e:
         logger.error(f"Error computing Puell Multiple: {e}")
         return np.nan
@@ -246,19 +245,19 @@ def get_stock_data(ticker, retries=5):
                 continue
             hist.columns = [col.lower() for col in hist.columns]
             stock_df = StockDataFrame.retype(hist)
-            sma_50 = hist['close'].rolling(window=50).mean().iloc[-1]
-            current_price = stock.fast_info.get('last_price', hist['close'].iloc[-1])
-            rsi = stock_df['rsi_14'].iloc[-1]
-            bb_lower = stock_df['boll_lb'].iloc[-1]
-            bb_upper = stock_df['boll_ub'].iloc[-1]
-            current_volume = hist['volume'].iloc[-1]
-            avg_volume = hist['volume'].rolling(window=20).mean().iloc[-1]
-            volatility = hist['close'].pct_change().rolling(window=20).std().iloc[-1] * 100
+            sma_50 = float(hist['close'].rolling(window=50).mean().iloc[-1])
+            current_price = float(stock.fast_info.get('last_price', hist['close'].iloc[-1]))
+            rsi = float(stock_df['rsi_14'].iloc[-1])
+            bb_lower = float(stock_df['boll_lb'].iloc[-1])
+            bb_upper = float(stock_df['boll_ub'].iloc[-1])
+            current_volume = float(hist['volume'].iloc[-1])
+            avg_volume = float(hist['volume'].rolling(window=20).mean().iloc[-1])
+            volatility = float(hist['close'].pct_change().rolling(window=20).std().iloc[-1] * 100)
             threshold = max(0.90, 0.95 - (volatility * 0.1))
-            high_52w = hist['high'].max()
-            low_52w = hist['low'].min()
+            high_52w = float(hist['high'].max())
+            low_52w = float(hist['low'].min())
             positions = load_positions()
-            avg_cost = positions.get(ticker, {}).get('avg_cost', 0)
+            avg_cost = float(positions.get(ticker, {}).get('avg_cost', 0))
             hl2 = (hist['high'] + hist['low']) / 2
             v1 = smma(hl2, 15).iloc[-1]
             m1 = smma(hl2, 19).iloc[-1]
@@ -273,7 +272,7 @@ def get_stock_data(ticker, retries=5):
             news = get_news_summary(ticker)
             forecast = forecast_rebound(hist, ticker)
             data = {
-                'date': datetime.date.today().isoformat(),
+                'date': date.today().isoformat(),
                 'ticker': ticker,
                 'current_price': current_price,
                 'sma_50': sma_50,
@@ -303,9 +302,9 @@ def get_stock_data(ticker, retries=5):
                 data['btc_dominance'] = fetch_btc_dominance()
                 data['puell_multiple'] = approximate_puell_multiple(hist)
             if ticker == '^GSPC':
-                vix = yf.download('^VIX', period='1y', progress=False, auto_adjust=False)['Close'].iloc[-1]
-                t10y = yf.download('^TNX', period='1mo', progress=False, auto_adjust=False)['Close'].iloc[-1]
-                t2y = yf.download('^IRX', period='1mo', progress=False, auto_adjust=False)['Close'].iloc[-1] / 100
+                vix = float(yf.download('^VIX', period='1y', progress=False, auto_adjust=False)['Close'].iloc[-1])
+                t10y = float(yf.download('^TNX', period='1mo', progress=False, auto_adjust=False)['Close'].iloc[-1])
+                t2y = float(yf.download('^IRX', period='1mo', progress=False, auto_adjust=False)['Close'].iloc[-1] / 100)
                 data['vix'] = vix
                 data['yield_curve'] = t10y - t2y
                 data['election_year'] = str(int(data['date'][:4]) % 4 + 1)
@@ -333,8 +332,8 @@ def get_buy_score(data):
     name = get_ticker_name(data['ticker'])
     prompt = f"""
     Evaluate DCA in (buy) opportunity for {name} based on:
-    - Current: ${data['current_price']:.2f}, 50-day SMA: ${data['sma_50']:.2f} ({data['percent_below_sma']:.1f}% below)
-    - RSI: {data['rsi']:.1f}, Below BB: {data['current_price'] <= data['bb_lower']}
+    - Current: ${float(data['current_price']):.2f}, 50-day SMA: ${float(data['sma_50']):.2f} ({data['percent_below_sma']:.1f}% below)
+    - RSI: {float(data['rsi']):.1f}, Below BB: {data['current_price'] <= data['bb_lower']}
     - Volatility Threshold: {data['threshold']:.2f}, % from 52w High: {data['percent_from_high']:.1f}%
     - Sentiment Score: {data['sentiment_score']:.2f}
     - Larsson Line Trend: {data['larsson_line']} (Analysis: {data['larsson_analysis']})
@@ -355,9 +354,9 @@ def get_sell_score(data):
     percent_above_sma = (data['current_price'] - data['sma_50']) / data['sma_50'] * 100
     prompt = f"""
     Evaluate DCA out (sell) opportunity for {name} based on:
-    - Current: ${data['current_price']:.2f}, 50-day SMA: ${data['sma_50']:.2f} ({percent_above_sma:.1f}% above)
-    - Avg Cost: ${avg_cost:.2f} ({profit_pct:.1f}% profit)
-    - RSI: {data['rsi']:.1f}, Above BB: {data['current_price'] >= data['bb_upper']}
+    - Current: ${float(data['current_price']):.2f}, 50-day SMA: ${float(data['sma_50']):.2f} ({percent_above_sma:.1f}% above)
+    - Avg Cost: ${float(avg_cost):.2f} ({profit_pct:.1f}% profit)
+    - RSI: {float(data['rsi']):.1f}, Above BB: {data['current_price'] >= data['bb_upper']}
     - Volatility Threshold: {data['threshold']:.2f}, % from 52w Low: {data['percent_from_low']:.1f}%
     - Sentiment Score: {data['sentiment_score']:.2f}
     - Larsson Line Trend: {data['larsson_line']} (Analysis: {data['larsson_analysis']})
@@ -468,17 +467,17 @@ def send_email(all_data, alerts, tickers=STOCKS):
         profit_pct = (data['current_price'] - avg_cost) / avg_cost * 100 if avg_cost > 0 else 0
         body += f"""
         {name} ({ticker}) ({status}):
-        - Price: ${data['current_price']:.2f} ({data['percent_below_sma']:.1f}% below SMA: ${data['sma_50']:.2f})
-        - Avg Cost: ${avg_cost:.2f} ({profit_pct:.1f}% {'profit' if profit_pct > 0 else 'loss'})
-        - RSI: {data['rsi']:.1f}, Volume: {data['volume_ratio']:.1f}x avg
+        - Price: ${float(data['current_price']):.2f} ({data['percent_below_sma']:.1f}% below SMA: ${float(data['sma_50']):.2f})
+        - Avg Cost: ${float(avg_cost):.2f} ({profit_pct:.1f}% {'profit' if profit_pct > 0 else 'loss'})
+        - RSI: {float(data['rsi']):.1f}, Volume: {data['volume_ratio']:.1f}x avg
         - Larsson Line: {data['larsson_line']} (Analysis: {data['larsson_analysis']})
         """
         if ticker in ['BTC-USD', '^GSPC']:
             body += f"- Cycle Phase: {data['cycle_phase']} ({data['cycle_analysis']})\n"
         if ticker == 'BTC-USD':
-            body += f"- Dominance: {data['btc_dominance'] or 'N/A'}%, Puell Multiple: {data['puell_multiple']:.2f}\n"
+            body += f"- Dominance: {data['btc_dominance'] or 'N/A'}%, Puell Multiple: {float(data['puell_multiple']):.2f}\n"
         if ticker == '^GSPC':
-            body += f"- VIX: {data['vix']:.2f}, Yield Curve: {data['yield_curve']:.2f}%\n"
+            body += f"- VIX: {float(data['vix']):.2f}, Yield Curve: {float(data['yield_curve']):.2f}%\n"
         if data['opportunity_type'] == 'buy':
             body += f"""
         - Buy Score: {data['buy_combined_score']:.1f}/100 ({data['recommendation']}: {data['reasoning']})
@@ -490,8 +489,8 @@ def send_email(all_data, alerts, tickers=STOCKS):
         body += f"""
         - Sentiment: {data['sentiment_summary']} (Score: {data['sentiment_score']:.2f})
         - News: {data['news_summary']} (Risk: {data['news_risk_level']})
-        - Forecast: ${data['forecast_price']:.2f} ({data['rebound_prob']*100:.1f}% chance, {data['forecast_confidence']})
-        - Suggested DCA: ${data['dca_amount']:.2f} ({opp_type})
+        - Forecast: ${float(data['forecast_price']):.2f} ({data['rebound_prob']*100:.1f}% chance, {data['forecast_confidence']})
+        - Suggested DCA: ${float(data['dca_amount']):.2f} ({opp_type})
         \n"""
     body += "Not financial advice. DYOR."
     msg.attach(MIMEText(body, 'plain'))
@@ -518,17 +517,17 @@ def all_data_to_markdown(all_data):
         profit_pct = (data['current_price'] - avg_cost) / avg_cost * 100 if avg_cost > 0 else 0
         markdown += f"""
 ## {name} ({data['ticker']}) ({status})
-- **Price**: ${data['current_price']:.2f} ({data['percent_below_sma']:.1f}% below SMA: ${data['sma_50']:.2f})
-- **Avg Cost**: ${avg_cost:.2f} ({profit_pct:.1f}% {'profit' if profit_pct > 0 else 'loss'})
-- **RSI**: {data['rsi']:.1f}, **Volume**: {data['volume_ratio']:.1f}x avg
+- **Price**: ${float(data['current_price']):.2f} ({data['percent_below_sma']:.1f}% below SMA: ${float(data['sma_50']):.2f})
+- **Avg Cost**: ${float(avg_cost):.2f} ({profit_pct:.1f}% {'profit' if profit_pct > 0 else 'loss'})
+- **RSI**: {float(data['rsi']):.1f}, **Volume**: {data['volume_ratio']:.1f}x avg
 - **Larsson Line**: {data['larsson_line']} ({data['larsson_analysis']})
 """
         if data['ticker'] in ['BTC-USD', '^GSPC']:
             markdown += f"- **Cycle Phase**: {data['cycle_phase']} ({data['cycle_analysis']})\n"
         if data['ticker'] == 'BTC-USD':
-            markdown += f"- **Dominance**: {data['btc_dominance'] or 'N/A'}%, **Puell Multiple**: {data['puell_multiple']:.2f}\n"
+            markdown += f"- **Dominance**: {data['btc_dominance'] or 'N/A'}%, **Puell Multiple**: {float(data['puell_multiple']):.2f}\n"
         if data['ticker'] == '^GSPC':
-            markdown += f"- **VIX**: {data['vix']:.2f}, **Yield Curve**: {data['yield_curve']:.2f}%\n"
+            markdown += f"- **VIX**: {float(data['vix']):.2f}, **Yield Curve**: {float(data['yield_curve']):.2f}%\n"
         if data['opportunity_type'] == 'buy':
             markdown += f"- **Buy Score**: {data['buy_combined_score']:.1f}/100 ({data['recommendation']}: {data['reasoning']})\n"
         elif data['opportunity_type'] == 'sell':
@@ -536,8 +535,8 @@ def all_data_to_markdown(all_data):
         markdown += f"""
 - **Sentiment**: {data['sentiment_summary']} (Score: {data['sentiment_score']:.2f})
 - **News**: {data['news_summary']} (Risk: {data['news_risk_level']})
-- **Forecast**: ${data['forecast_price']:.2f} ({data['rebound_prob']*100:.1f}% chance, {data['forecast_confidence']})
-- **Suggested DCA**: ${data['dca_amount']:.2f} ({opp_type})
+- **Forecast**: ${float(data['forecast_price']):.2f} ({data['rebound_prob']*100:.1f}% chance, {data['forecast_confidence']})
+- **Suggested DCA**: ${float(data['dca_amount']):.2f} ({opp_type})
 \n"""
     return markdown
 
@@ -556,11 +555,10 @@ def main():
                 update_position(ticker, 'sell', data['current_price'])
             alerts.append(data)
     save_to_csv(all_data)
-    md_file = f"{PROJECT_NAME}_{datetime.date.today().isoformat()}.md"
+    md_file = f"{PROJECT_NAME}_{date.today().isoformat()}.md"
     with open(md_file, 'w') as f:
-        f.write(f"# {PROJECT_NAME} - Daily DCA and Cycle Analysis - {datetime.date.today().isoformat()}\n\n{all_data_to_markdown(all_data)}")
+        f.write(f"# {PROJECT_NAME} - Daily DCA and Cycle Analysis - {date.today().isoformat()}\n\n{all_data_to_markdown(all_data)}")
     send_email(all_data, alerts, STOCKS)
 
 if __name__ == "__main__":
     main()
-
