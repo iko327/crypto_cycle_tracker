@@ -1,0 +1,53 @@
+name: Run Stock Bot
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * *'  # Runs daily at midnight UTC
+
+jobs:
+  stock-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Run stock_bot.py
+        env:
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+        run: python stock_bot.py
+
+      - name: Debug working directory and file presence
+        run: |
+          pwd
+          ls -l
+          find . -name positions.json
+          find . -name market_data_history.csv
+          find . -name "*.md"
+
+      - name: Commit and push changes
+        run: |
+          git add positions.json market_data_history.csv *.md || echo "No files to add"
+          git diff --staged --quiet || git commit -m "Update stock bot outputs: positions, CSV, and markdown"
+          git push || echo "No changes to push"
