@@ -42,4 +42,4 @@ jobs:
         name: stock-bot-log
         path: stock_bot.log
         retention-days: 7
-```
+
