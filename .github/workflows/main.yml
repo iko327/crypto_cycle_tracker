@@ -1,4 +1,3 @@
-```yaml
 name: Stock Bot Workflow
 on:
   schedule:
