@@ -1,7 +1,7 @@
 name: Stock Bot Workflow
 on:
-  schedule:
-    - cron: '1 9 * * *'  # Runs daily at 8:01 UTC (19:01 AEDT)
+  #schedule:
+    #- cron: '1 9 * * *'  # Runs daily at 8:01 UTC (19:01 AEDT)
   workflow_dispatch:  # Enables manual trigger via "Run workflow" button
 jobs:
   run-stock-bot:
